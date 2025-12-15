@@ -3,42 +3,52 @@
 
 #define GPIO_OUT GPIO_NUM_32
 
-void sk6812_ledInit() {
-    gpio_reset_pin(GPIO_OUT);
-    gpio_set_direction(GPIO_OUT, GPIO_MODE_OUTPUT);
-}
-
-void setT0H() {
+static void set_t0h() {
     gpio_set_level_insecure(GPIO_OUT, 1);
 }
 
-void setT0L() {
+static void set_t0l() {
     gpio_set_level_insecure(GPIO_OUT, 0);
     gpio_set_level_insecure(GPIO_OUT, 0);
     gpio_set_level_insecure(GPIO_OUT, 0);
 }
 
-void setT1H() {
+static void set_t1h() {
     gpio_set_level_insecure(GPIO_OUT, 1);
     gpio_set_level_insecure(GPIO_OUT, 1);
 }
 
-void setT1L() {
+static void set_t1l() {
     gpio_set_level_insecure(GPIO_OUT, 0);
     gpio_set_level_insecure(GPIO_OUT, 0);
 }
 
-void add(uint8_t& x, uint8_t incr) {
+static void add(uint8_t& x, uint8_t incr) {
     if(x + incr > 255) x = 255;
     else x+= incr;
 }
 
-void minus(uint8_t& x, uint8_t decr) {
+static void minus(uint8_t& x, uint8_t decr) {
     if(x - decr > x) x = 0;
     else x -= decr;
 }
 
-void ColourState::stepTo(ColourState &targ) {
+void ColourState::print() const{
+    printf("(%d, %d, %d)\n", g, r, b);
+}
+
+void ColourState::initTarget(const ColourState* p) const {
+    targetPtr = const_cast<ColourState*>(p);
+}
+
+////////////////
+
+void skc6812_led_Init() {
+    gpio_reset_pin(GPIO_OUT);
+    gpio_set_direction(GPIO_OUT, GPIO_MODE_OUTPUT);
+}
+
+void ColourState::stepTo(const ColourState &targ) {
     if(targ.g > g)      add(g, step);
     else if(g > step)   minus(g, step);
 
@@ -49,7 +59,7 @@ void ColourState::stepTo(ColourState &targ) {
     else if(b > step)   minus(b, step);
 }
 
-void sk6812Shine(const ColourState& state) {
+void skc6812_shine(const ColourState& state) {
     static uint8_t bits[24]{};
     const uint8_t* colourPtrs[3] = {&state.g, &state.r, &state.b};
 
@@ -61,13 +71,41 @@ void sk6812Shine(const ColourState& state) {
 
     for(int i=0; i < sizeof(bits); i++) {
         if(bits[i]) {
-            setT1H();
-            setT1L();
+            set_t1h();
+            set_t1l();
         } else {
-            setT0H();
-            setT0L();
+            set_t0h();
+            set_t0l();
         }
     }
 
     gpio_set_level_insecure(GPIO_OUT, 0);
+}
+
+void skc6812_blue_test() {
+    int i = 0;
+    //  green
+    for( i=0; i<8; i++) {
+//        set_t1h();
+//        set_t1l();
+        set_t0h();
+        set_t0l();
+    }
+
+    //  red
+    for(; i<16; i++) {
+    //    set_t1h();
+    //    set_t1l();
+        set_t0h();
+        set_t0l();
+    }
+
+    // blue
+    for(; i<24; i++) {
+        set_t1h();
+        set_t1l();
+//        set_t0h();
+//        set_t0l();
+    }
+    set_t0l();
 }

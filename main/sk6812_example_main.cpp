@@ -8,31 +8,53 @@
 #include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-//#include "esp_chip_info.h"
 #include "driver/gptimer.h"
 #include "esp_timer.h"
 #include "sk6812_led.h"
 
-enum TARGET {
-    TARGET1,
-    TARGET2
-} target = TARGET1;
+const static ColourState* state1Ptr = new ColourState{20, 20, 20};
+const static ColourState* state2Ptr = new ColourState{80, 80, 80};
+const static ColourState* state3Ptr = new ColourState{0, 255, 0};
 
-ColourState state1{100, 100, 100};
-ColourState state2{10, 255, 10};
-ColourState state{0,0,0};
+static QueueHandle_t ledQueue;
 
 static bool timer_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx)
 {
-    if(target == TARGET1)  target = TARGET2;
-    else target = TARGET1;
+    static const ColourState* targetPtr{state1Ptr};
+
+    xQueueSend(ledQueue, &targetPtr->targetPtr , (TickType_t)0 );
+    targetPtr = targetPtr->targetPtr;
 
     return true;
 }
 
+void led_task(void *pvParameters) {
+    state1Ptr->initTarget(state2Ptr);
+    state2Ptr->initTarget(state3Ptr);
+    state3Ptr->initTarget(state1Ptr);
+
+    ColourState* target;
+    ColourState state = {0,0,0};
+    state.initTarget(state1Ptr);
+
+    while(true) {
+        if(xQueueReceive(ledQueue, &target , (TickType_t)0)) {
+            state.targetPtr = target;
+            state.targetPtr->print();
+        }
+
+        state.stepTo(*state.targetPtr);
+        skc6812_shine(state);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+
 extern "C" {
 void app_main(void) {
-    sk6812_ledInit();
+    skc6812_led_Init();
+
+    ledQueue = xQueueCreate(2, sizeof(ColourState*));
 
     // timer
     gptimer_handle_t gptimer = NULL;
@@ -57,40 +79,11 @@ void app_main(void) {
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
     ESP_ERROR_CHECK(gptimer_start(gptimer));
 
+    xTaskCreate(led_task, "led task", 4096, NULL, 6, NULL);
+
     while (true) {
-//          int i = 0;
-//        //     green
-//        for( i=0; i<8; i++) {
-////            setT1H();
-////            setT1L();
-//            setT0H();
-//            setT0L();
-//        }
-//
-//        // red
-//        for(; i<16; i++) {
-////            setT1H();
-////            setT1L();
-//            setT0H();
-//            setT0L();
-//        }
-//
-//        // blue
-//        for(; i<24; i++) {
-//            setT1H();
-//            setT1L();
-////            setT0H();
-////            setT0L();
-//        }
-//        setT0L();
-
-
-        if(target == TARGET1)   state.stepTo(state1);
-        else    state.stepTo(state2);
-
-        sk6812Shine(state);
-        
-        vTaskDelay(1);
+//        skc6812_blue_test();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 }

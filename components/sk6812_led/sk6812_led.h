@@ -8,16 +8,20 @@
 //      return ESP_OK;
 // }
 
-void sk6812_ledInit();
-
 struct ColourState {
-    static constexpr uint8_t step = 4;
+    static constexpr uint8_t step = 2;
 
     uint8_t g;
     uint8_t r;
     uint8_t b;
 
-    void stepTo(ColourState& targ);
+    mutable ColourState* targetPtr = nullptr;
+    ///////////////
+    void initTarget(const ColourState*) const;
+    void print() const;
+    void stepTo(const ColourState& targ);
 };
 
-void sk6812Shine(const ColourState& state);
+void skc6812_led_Init();
+void skc6812_shine(const ColourState& state);
+void skc6812_blue_test();
