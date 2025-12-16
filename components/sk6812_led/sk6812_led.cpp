@@ -1,3 +1,4 @@
+#include "freertos/FreeRTOS.h"
 #include "sk6812_led.h"
 #include "driver/gpio.h"
 #include "sdkconfig.h"
@@ -83,6 +84,8 @@ void ColourState::stepTo(const ColourState &targ) {
     else if(b > step)   minus(b, step);
 }
 
+static portMUX_TYPE led_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
 void skc6812_shine(const ColourState& state) {
     static uint8_t bits[24]{};
     const uint8_t* colourPtrs[3] = {&state.g, &state.r, &state.b};
@@ -93,6 +96,7 @@ void skc6812_shine(const ColourState& state) {
         }
     }
 
+    taskENTER_CRITICAL(&led_spinlock);
     for(int i=0; i < sizeof(bits); i++) {
         if(bits[i]) {
             set_t1h();
@@ -104,6 +108,7 @@ void skc6812_shine(const ColourState& state) {
     }
 
     gpio_set_level_insecure(GPIO_OUT, 0);
+    taskEXIT_CRITICAL(&led_spinlock);
 }
 
 void skc6812_blue_test() {
