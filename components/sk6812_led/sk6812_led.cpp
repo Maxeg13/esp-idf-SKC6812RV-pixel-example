@@ -1,7 +1,17 @@
 #include "sk6812_led.h"
 #include "driver/gpio.h"
+#include "sdkconfig.h"
 
 #define GPIO_OUT GPIO_NUM_32
+
+#if !defined(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160)
+#error "edit NOPS_SLEEP_100NS for actual CPU clocking"
+#endif
+
+#define NOPS_SLEEP_100NS    "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
+
 
 static void set_t0h() {
     gpio_set_level_insecure(GPIO_OUT, 1);
@@ -9,18 +19,32 @@ static void set_t0h() {
 
 static void set_t0l() {
     gpio_set_level_insecure(GPIO_OUT, 0);
-    gpio_set_level_insecure(GPIO_OUT, 0);
-    gpio_set_level_insecure(GPIO_OUT, 0);
+    asm volatile(
+        NOPS_SLEEP_100NS
+        NOPS_SLEEP_100NS
+        NOPS_SLEEP_100NS
+        NOPS_SLEEP_100NS
+        NOPS_SLEEP_100NS
+        NOPS_SLEEP_100NS
+            );
 }
 
 static void set_t1h() {
     gpio_set_level_insecure(GPIO_OUT, 1);
-    gpio_set_level_insecure(GPIO_OUT, 1);
+    asm volatile(
+            NOPS_SLEEP_100NS
+            NOPS_SLEEP_100NS
+            NOPS_SLEEP_100NS
+            );
 }
 
 static void set_t1l() {
     gpio_set_level_insecure(GPIO_OUT, 0);
-    gpio_set_level_insecure(GPIO_OUT, 0);
+    asm volatile(
+            NOPS_SLEEP_100NS
+            NOPS_SLEEP_100NS
+            NOPS_SLEEP_100NS
+            );
 }
 
 static void add(uint8_t& x, uint8_t incr) {
