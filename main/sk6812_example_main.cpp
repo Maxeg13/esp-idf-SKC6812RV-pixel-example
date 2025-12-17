@@ -16,45 +16,23 @@ const static ColourState* state1Ptr = new ColourState{20, 20, 20};
 const static ColourState* state2Ptr = new ColourState{80, 80, 80};
 const static ColourState* state3Ptr = new ColourState{0, 255, 0};
 
-static QueueHandle_t ledQueue;
-
 static bool timer_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_ctx)
 {
     static const ColourState* targetPtr{state1Ptr};
 
-    xQueueSend(ledQueue, &targetPtr->targetPtr , (TickType_t)0 );
+    skc6812_push(targetPtr);
     targetPtr = targetPtr->targetPtr;
 
     return true;
-}
-
-void led_task(void *pvParameters) {
-    state1Ptr->initTarget(state2Ptr);
-    state2Ptr->initTarget(state3Ptr);
-    state3Ptr->initTarget(state1Ptr);
-
-    ColourState* target;
-    ColourState state = {0,0,0};
-    state.initTarget(state1Ptr);
-
-    while(true) {
-        if(xQueueReceive(ledQueue, &target , (TickType_t)0)) {
-            state.targetPtr = target;
-            state.targetPtr->print();
-        }
-
-        state.stepTo(*state.targetPtr);
-        skc6812_shine(state);
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
 }
 
 extern "C" {
 void app_main(void) {
     skc6812_led_Init();
 
-    ledQueue = xQueueCreate(2, sizeof(ColourState*));
+    state1Ptr->initTarget(state2Ptr);
+    state2Ptr->initTarget(state3Ptr);
+    state3Ptr->initTarget(state1Ptr);
 
     // timer
     gptimer_handle_t gptimer = NULL;
@@ -79,11 +57,11 @@ void app_main(void) {
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
     ESP_ERROR_CHECK(gptimer_start(gptimer));
 
-    xTaskCreate(led_task, "led task", 4096, NULL, 6, NULL);
+
 
     while (true) {
 //        skc6812_blue_test();
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 }

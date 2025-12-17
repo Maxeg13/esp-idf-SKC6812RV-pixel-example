@@ -14,6 +14,9 @@
                             "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
 
 
+static QueueHandle_t queue;
+static portMUX_TYPE led_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
 static void set_t0h() {
     gpio_set_level_insecure(GPIO_OUT, 1);
 }
@@ -66,12 +69,29 @@ void ColourState::initTarget(const ColourState* p) const {
     targetPtr = const_cast<ColourState*>(p);
 }
 
-////////////////
+static void sk6812_led_task(void *pvParameters) {
+    queue = xQueueCreate(2, sizeof(ColourState*));
 
-void skc6812_led_Init() {
-    gpio_reset_pin(GPIO_OUT);
-    gpio_set_direction(GPIO_OUT, GPIO_MODE_OUTPUT);
+    ColourState* target;
+    ColourState state = {0,0,0};
+
+    while(true) {
+        if(xQueueReceive(queue, &target , (TickType_t)0)) {
+            state.targetPtr = target;
+            state.targetPtr->print();
+        }
+
+        if(state.targetPtr != nullptr) {
+            state.stepTo(*state.targetPtr);
+        }
+
+        skc6812_shine(state);
+
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
+
+////////////////
 
 void ColourState::stepTo(const ColourState &targ) {
     if(targ.g > g)      add(g, step);
@@ -83,8 +103,6 @@ void ColourState::stepTo(const ColourState &targ) {
     if(targ.b > b)      add(b, step);
     else if(b > step)   minus(b, step);
 }
-
-static portMUX_TYPE led_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 void skc6812_shine(const ColourState& state) {
     static uint8_t bits[24]{};
@@ -109,6 +127,17 @@ void skc6812_shine(const ColourState& state) {
 
     gpio_set_level_insecure(GPIO_OUT, 0);
     taskEXIT_CRITICAL(&led_spinlock);
+}
+
+void skc6812_push(const ColourState* state) {
+    xQueueSend(queue, &state, (TickType_t)0 );
+}
+
+void skc6812_led_Init() {
+    gpio_reset_pin(GPIO_OUT);
+    gpio_set_direction(GPIO_OUT, GPIO_MODE_OUTPUT);
+
+    xTaskCreate(sk6812_led_task, "led task", 4096, NULL, 6, NULL);
 }
 
 void skc6812_blue_test() {
