@@ -28,6 +28,9 @@ static bool timer_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_
 
 extern "C" {
 void app_main(void) {
+    char c = 0;
+    scanf("%c", &c);
+    printf("my scanf gives: %c", c);
     skc6812_led_Init();
 
     state1Ptr->initTarget(state2Ptr);

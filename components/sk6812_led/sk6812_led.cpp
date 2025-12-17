@@ -83,6 +83,7 @@ static void sk6812_led_task(void *pvParameters) {
 
         if(state.targetPtr != nullptr) {
             state.stepTo(*state.targetPtr);
+//            state.print();
         }
 
         skc6812_led_shine(state);
@@ -94,14 +95,14 @@ static void sk6812_led_task(void *pvParameters) {
 ////////////////
 
 void ColourState::stepTo(const ColourState &targ) {
-    if(targ.g > g)      add(g, step);
-    else if(g > step)   minus(g, step);
+    if(g < targ.g)      add(g, step);
+    else if(g > targ.g)   minus(g, step);
 
-    if(targ.r > r)      add(r, step);
-    else if(r > step)   minus(r, step);
+    if(r < targ.r)      add(r, step);
+    else if(r > targ.r)   minus(r, step);
 
-    if(targ.b > b)      add(b, step);
-    else if(b > step)   minus(b, step);
+    if(b < targ.b)      add(b, step);
+    else if(b > targ.b)   minus(b, step);
 }
 
 void skc6812_led_shine(const ColourState& state) {
