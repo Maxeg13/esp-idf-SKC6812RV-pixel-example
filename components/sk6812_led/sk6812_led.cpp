@@ -3,26 +3,34 @@
 #include "driver/gpio.h"
 #include "sdkconfig.h"
 
-#define GPIO_OUT GPIO_NUM_32
+static gpio_num_t gpio_num;
 
 #if !defined(CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_160)
 #error "edit NOPS_SLEEP_100NS for actual CPU clocking"
 #endif
 
+#if defined(CONFIG_IDF_TARGET_ESP32)
 #define NOPS_SLEEP_100NS    "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
                             "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
                             "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t"
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+#define NOPS_SLEEP_100NS    "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" "nop\n\t" \
+                            "nop\n\t" "nop\n\t"
+#endif
 
 
 static QueueHandle_t queue;
 static portMUX_TYPE led_spinlock = portMUX_INITIALIZER_UNLOCKED;
 
 static void set_t0h() {
-    gpio_set_level_insecure(GPIO_OUT, 1);
+    gpio_set_level_insecure(gpio_num, 1);
 }
 
 static void set_t0l() {
-    gpio_set_level_insecure(GPIO_OUT, 0);
+    gpio_set_level_insecure(gpio_num, 0);
     asm volatile(
         NOPS_SLEEP_100NS
         NOPS_SLEEP_100NS
@@ -34,7 +42,7 @@ static void set_t0l() {
 }
 
 static void set_t1h() {
-    gpio_set_level_insecure(GPIO_OUT, 1);
+    gpio_set_level_insecure(gpio_num, 1);
     asm volatile(
             NOPS_SLEEP_100NS
             NOPS_SLEEP_100NS
@@ -43,7 +51,7 @@ static void set_t1h() {
 }
 
 static void set_t1l() {
-    gpio_set_level_insecure(GPIO_OUT, 0);
+    gpio_set_level_insecure(gpio_num, 0);
     asm volatile(
             NOPS_SLEEP_100NS
             NOPS_SLEEP_100NS
@@ -51,18 +59,18 @@ static void set_t1l() {
             );
 }
 
-static void add(uint8_t& x, uint8_t incr) {
-    if((int)x + (int)incr > 255) x = 255;
+static void add(float& x, float incr) {
+    if(x + incr > 255) x = 255;
     else x+= incr;
 }
 
-static void minus(uint8_t& x, uint8_t decr) {
-    if((int)x - (int)decr < 0) x = 0;
+static void minus(float& x, float decr) {
+    if(x - decr < 0) x = 0;
     else x -= decr;
 }
 
 void ColourState::print() const{
-    printf("(%d, %d, %d)\n", g, r, b);
+    printf("(%f, %f, %f)\n", g, r, b);
 }
 
 void ColourState::initTarget(const ColourState* p) const {
@@ -73,12 +81,13 @@ static void sk6812_led_task(void *pvParameters) {
     queue = xQueueCreate(2, sizeof(ColourState*));
 
     ColourState* target;
-    ColourState state = {0,0,0};
+    ColourState state = ColourState{0,0,0};
 
     while(true) {
         if(xQueueReceive(queue, &target , (TickType_t)0)) {
             state.targetPtr = target;
-            state.targetPtr->print();
+            state.computeStep(state.targetPtr);
+//            state.targetPtr->print();
         }
 
         if(state.targetPtr != nullptr) {
@@ -86,31 +95,42 @@ static void sk6812_led_task(void *pvParameters) {
 //            state.print();
         }
 
-        skc6812_led_shine(state);
+        skc6812_led_shine(&state);
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(pdMS_TO_TICKS(40));
     }
 }
 
 ////////////////
 
 void ColourState::stepTo(const ColourState &targ) {
-    if(g < targ.g)      add(g, step);
-    else if(g > targ.g)   minus(g, step);
+    if(step_i >= steps_n) return;
+    step_i++;
 
-    if(r < targ.r)      add(r, step);
-    else if(r > targ.r)   minus(r, step);
-
-    if(b < targ.b)      add(b, step);
-    else if(b > targ.b)   minus(b, step);
+    g += g_step;
+    r += r_step;
+    b += b_step;
 }
 
-void skc6812_led_shine(const ColourState& state) {
-    static uint8_t bits[24]{};
-    const uint8_t* colourPtrs[3] = {&state.g, &state.r, &state.b};
+void ColourState::computeStep(const ColourState* targ) const {
+    step_i = 0;
+
+    g_step = (targ->g - g) / steps_n;
+    r_step = (targ->r - r) / steps_n;
+    b_step = (targ->b - b) / steps_n;
+}
+
+void skc6812_led_shine(const ColourState* state) {
+    static uint8_t bits[32]{};
+    static uint8_t white = 20;
+
+    uint8_t g = state->g;
+    uint8_t r = state->r;
+    uint8_t b = state->b;
+    const uint8_t* colourPtrs[4] = {&g, &r, &b, &white};
 
     for(int i=0; const auto& colourPtr: colourPtrs) {
-        for(int b = 7; (i < sizeof(bits)) && b != -1; i++, b--) {
+        for(int b = 7; (i < 24) && b != -1; i++, b--) {
             bits[i] = (*colourPtr >> b) & 0x1;
         }
     }
@@ -126,7 +146,6 @@ void skc6812_led_shine(const ColourState& state) {
         }
     }
 
-    gpio_set_level_insecure(GPIO_OUT, 0);
     taskEXIT_CRITICAL(&led_spinlock);
 }
 
@@ -134,9 +153,11 @@ void skc6812_led_push(const ColourState* state) {
     xQueueSend(queue, &state, (TickType_t)0 );
 }
 
-void skc6812_led_Init() {
-    gpio_reset_pin(GPIO_OUT);
-    gpio_set_direction(GPIO_OUT, GPIO_MODE_OUTPUT);
+void skc6812_led_init(gpio_num_t num) {
+    gpio_num = num;
+
+    gpio_reset_pin(num);
+    gpio_set_direction(num, GPIO_MODE_OUTPUT);
 
     xTaskCreate(sk6812_led_task, "led task", 4096, NULL, 6, NULL);
 }

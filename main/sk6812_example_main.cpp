@@ -23,15 +23,17 @@ static bool timer_on_alarm_cb(gptimer_handle_t timer, const gptimer_alarm_event_
     skc6812_led_push(targetPtr);
     targetPtr = targetPtr->targetPtr;
 
+//    skc6812_led_shine(targetPtr);
+//    targetPtr = targetPtr->targetPtr;
+//    skc6812_led_shine(targetPtr);
+//    targetPtr = targetPtr->targetPtr;
+
     return true;
 }
 
 extern "C" {
 void app_main(void) {
-    char c = 0;
-    scanf("%c", &c);
-    printf("my scanf gives: %c", c);
-    skc6812_led_Init();
+    skc6812_led_init(GPIO_NUM_3);
 
     state1Ptr->initTarget(state2Ptr);
     state2Ptr->initTarget(state3Ptr);
